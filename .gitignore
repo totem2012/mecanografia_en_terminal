@@ -1,0 +1,15 @@
+# Ejecutables compilados
+dist/
+build/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Entorno virtual
+.pdfvenv/
+
+# Datos de usuario
+data/ranking.json

@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(curl -sI --max-time 15 https://www.gutenberg.org/)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(curl -s --max-time 30 \"https://gutendex.com/books/?languages=es&sort=popular\" -o /tmp/es_page1.json)",
+      "Bash(timeout 120 soffice --headless --convert-to pdf:writer_web_pdf_Export --outdir . presentacion.html)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(ls -la *.pdf)",
+      "Bash(timeout 150 /snap/bin/libreoffice --headless --convert-to pdf:writer_web_pdf_Export --outdir . presentacion.html)",
+      "Bash(command -v pandoc)",
+      "Bash(pip install *)",
+      "Bash(.pdfvenv/bin/pip install *)",
+      "Bash(.pdfvenv/bin/python -c \"import fpdf; print\\('fpdf2', fpdf.__version__, 'OK'\\)\")",
+      "Read(//usr/share/fonts/truetype/dejavu/**)",
+      "Bash(fc-list)",
+      "Bash(.pdfvenv/bin/python scripts/generar_presentacion.py)",
+      "Bash(pdftoppm -png -r 70 -f 1 -l 4 presentacion.pdf /tmp/slide)",
+      "Read(//tmp/**)",
+      "Bash(xargs ls -la)",
+      "Bash(pip3 show *)",
+      "Bash(pip3 install *)",
+      "Bash(timeout 2 ./mecanografia)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(/home/totem2012/Documentos/mecanografia_terminal/dist/mecanografia --help)"
+    ]
+  }
+}
