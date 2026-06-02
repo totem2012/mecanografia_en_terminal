@@ -1,0 +1,32 @@
+[
+  {
+    "nombre": "totem",
+    "ppm": 77.6,
+    "precision": 100.0,
+    "fecha": "2026-06-02T11:06:55"
+  },
+  {
+    "nombre": "totem",
+    "ppm": 75.3,
+    "precision": 100.0,
+    "fecha": "2026-06-02T11:01:12"
+  },
+  {
+    "nombre": "toty",
+    "ppm": 74.6,
+    "precision": 97.6,
+    "fecha": "2026-06-02T11:11:46"
+  },
+  {
+    "nombre": "tt12",
+    "ppm": 73.9,
+    "precision": 98.9,
+    "fecha": "2026-06-01T14:22:12"
+  },
+  {
+    "nombre": "tt12",
+    "ppm": 70.0,
+    "precision": 97.5,
+    "fecha": "2026-06-01T14:16:47"
+  }
+]
