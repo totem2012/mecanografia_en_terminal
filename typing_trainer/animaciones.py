@@ -147,6 +147,112 @@ def intro():
         io.vaciar_entrada()
 
 
+# --------------------------------------------------------------------------- #
+#  Cuenta atrás arcade (antes de cada prueba)
+# --------------------------------------------------------------------------- #
+def _caja_centrada(texto, color, ancho_int=13):
+    """Caja de doble marco con `texto` centrado, estilo marcador arcade."""
+    medio = _centro(texto, ancho_int)
+    pad = "          "  # margen izquierdo fijo
+    cab = color + C["negrita"]
+    top = pad + cab + "╔" + "═" * ancho_int + "╗" + C["reset"]
+    vac = pad + cab + "║" + " " * ancho_int + "║" + C["reset"]
+    mid = pad + cab + "║" + C["reset"] + cab + medio + C["reset"] + cab + "║" + C["reset"]
+    bot = pad + cab + "╚" + "═" * ancho_int + "╝" + C["reset"]
+    return "\n".join([top, vac, mid, vac, bot])
+
+
+def cuenta_atras():
+    """Cuenta atrás 3 · 2 · 1 · ¡YA! antes de arrancar una prueba.
+
+    Se dibuja sobre el buffer de pantalla activo (el que ya preparó el
+    renderer), de modo que enlaza directo con el primer frame de la prueba.
+    """
+    if not activadas():
+        return
+    pasos = [
+        ("3", C["amarillo"], 0.55),
+        ("2", C["amarillo"], 0.55),
+        ("1", "\x1b[91m", 0.55),       # rojo intenso
+        ("¡YA!", C["correcto"], 0.45),
+    ]
+    _w("\x1b[2J\x1b[H\x1b[?25l")
+    try:
+        with io.raw_mode():
+            for txt, col, dur in pasos:
+                _w("\x1b[H\n\n\n\n")
+                _w(_caja_centrada(txt, col) + "\n")
+                _w("\x1b[J")
+                if _esperar(dur):
+                    break
+    finally:
+        _w("\x1b[?25h")
+        io.vaciar_entrada()
+
+
+# --------------------------------------------------------------------------- #
+#  Contador de puntuación (tally arcade del resultado)
+# --------------------------------------------------------------------------- #
+def contador_lineas(formatos, pasos=16, paso=0.03):
+    """Anima varias líneas-contador subiendo de 0 a su valor final a la vez.
+
+    `formatos` es una lista de funciones `f(t) -> str`, donde `t` va de 0 a 1;
+    cada una compone la línea completa con el valor escalado por `t`. Útil para
+    el tally de PPM/precisión del resultado (efecto de marcador que sube).
+    Saltable con cualquier tecla; respeta MECANOGRAFIA_SIN_ANIMACION.
+    """
+    n = len(formatos)
+    if not n:
+        return
+    if not activadas():
+        for f in formatos:
+            _w(f(1.0) + "\n")
+        return
+    for _ in range(n):       # reservar las n líneas
+        _w("\n")
+    try:
+        with io.raw_mode():
+            saltar = False
+            for k in range(1, pasos):     # frames intermedios (no el final)
+                t = k / pasos
+                _w(f"\x1b[{n}A")          # subir al inicio del bloque
+                for f in formatos:
+                    _w("\r" + f(t) + "\x1b[K\n")
+                if _esperar(paso):
+                    saltar = True
+                    break
+    finally:
+        _w(f"\x1b[{n}A")                  # frame final exacto
+        for f in formatos:
+            _w("\r" + f(1.0) + "\x1b[K\n")
+        io.vaciar_entrada()
+
+
+# --------------------------------------------------------------------------- #
+#  PRESS START parpadeante (menú principal)
+# --------------------------------------------------------------------------- #
+def press_start(parpadeos=3, paso=0.18):
+    """Parpadea un '► PRESS START ◄' estilo 'insert coin' y lo deja encendido.
+
+    Se dibuja en la línea actual (la deja ocupada y baja con \\n al terminar).
+    """
+    linea = "  " + _centro("► PRESS START ◄", _ANCHO)
+    encendido = C["amarillo"] + C["negrita"]
+    if not activadas():
+        _w(encendido + linea + C["reset"] + "\n")
+        return
+    try:
+        with io.raw_mode():
+            for i in range(parpadeos * 2 - 1):
+                col = encendido if i % 2 == 0 else C["dim"]
+                _w("\r" + col + linea + C["reset"] + "\x1b[K")
+                if _esperar(paso):
+                    break
+    finally:
+        _w("\r" + encendido + linea + C["reset"] + "\x1b[K\n")
+        io.vaciar_entrada()
+
+
 _MEDALLAS = {1: "🥇", 2: "🥈", 3: "🥉", 4: "4️⃣", 5: "5️⃣"}
 
 

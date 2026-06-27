@@ -88,12 +88,17 @@ def mostrar_resultado(res):
     print()
     print(C["negrita"] + "  📊  Resultado de la prueba" + C["reset"])
     print("  " + "─" * 40)
-    print(f"  Velocidad ....... {C['amarillo']}{res['ppm']:.0f} PPM{C['reset']}  "
-          f"({res['cpm']:.0f} caracteres/min)")
-    print(f"  Precisión ....... {res['precision']:.1f}%")
+    # Tally arcade: la velocidad y la precisión suben hasta su valor final.
+    animaciones.contador_lineas([
+        lambda t: (f"  Velocidad ....... {C['amarillo']}{res['ppm'] * t:.0f} PPM{C['reset']}  "
+                   f"({res['cpm'] * t:.0f} caracteres/min)"),
+        lambda t: f"  Precisión ....... {res['precision'] * t:.1f}%",
+    ])
     print(f"  Errores ......... {res['errores']}")
     print(f"  Tiempo .......... {res['tiempo']:.1f} s")
     print(f"  Longitud ........ {res['caracteres']} caracteres (~{palabras:.0f} palabras)")
+    if res.get("mejor_racha", 0) >= 5:
+        print(f"  Mejor combo ..... {C['magenta']}{C['negrita']}x{res['mejor_racha']}{C['reset']} 🔥")
     print("  " + "─" * 40)
     if res["ppm"] >= 60:
         print(C["correcto"] + "  ¡Excelente velocidad! 🚀" + C["reset"])
@@ -196,7 +201,9 @@ def menu_principal(sesion):
         print("  2) Practicar con mi propio texto (.txt)")
         print("  3) Ver estadísticas de la sesión")
         print("  4) Salir")
-        opcion = _leer("\n  Elige una opción: ").lower()
+        print()
+        animaciones.press_start()
+        opcion = _leer("  Elige una opción: ").lower()
         if opcion == "1":
             practicar_citas(sesion)
         elif opcion == "2":

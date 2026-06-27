@@ -7,6 +7,7 @@ y devuelve un dict con el resultado (o None si el usuario abortó con ESC).
 import time
 from datetime import datetime
 
+from . import animaciones
 from . import platform_io as io
 from . import renderer
 
@@ -21,16 +22,19 @@ def ejecutar_prueba(texto, fuente="cita", autor=None):
     inicio = None
     ultima_tecla = None   # último caracter pulsado (para el teclado en pantalla)
     ultimo_ok = True      # si esa última pulsación fue un acierto
+    racha = 0             # aciertos seguidos (COMBO arcade)
+    mejor_racha = 0       # mayor racha alcanzada en la prueba
 
     renderer.entrar_pantalla()
     try:
+        animaciones.cuenta_atras()
         with io.raw_mode():
             while True:
                 transcurrido = (time.time() - inicio) if inicio else 0.0
                 renderer.dibujar_prueba(
                     objetivo, escrito, transcurrido, autor,
                     pulsaciones, errores_pulsacion,
-                    ultima_tecla, ultimo_ok,
+                    ultima_tecla, ultimo_ok, racha,
                 )
                 if len(escrito) >= n:
                     break  # texto completado
@@ -50,8 +54,12 @@ def ejecutar_prueba(texto, fuente="cita", autor=None):
                     pulsaciones += 1
                     ultima_tecla = ch
                     ultimo_ok = ch == objetivo[pos]
-                    if not ultimo_ok:
+                    if ultimo_ok:
+                        racha += 1
+                        mejor_racha = max(mejor_racha, racha)
+                    else:
                         errores_pulsacion += 1
+                        racha = 0
                 # ENTER, TAB, SPECIAL y OTHER se ignoran (las citas no
                 # contienen saltos de línea ni tabulaciones).
     finally:
@@ -76,4 +84,5 @@ def ejecutar_prueba(texto, fuente="cita", autor=None):
         "precision": round(precision, 1),
         "errores": errores_finales,
         "pulsaciones": pulsaciones,
+        "mejor_racha": mejor_racha,
     }

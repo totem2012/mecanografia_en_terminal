@@ -38,6 +38,7 @@ C = {
     "dim": "\x1b[2m",
     "cian": "\x1b[36m",
     "amarillo": "\x1b[33m",
+    "magenta": "\x1b[95m",
     "negrita": "\x1b[1m",
 }
 
@@ -118,14 +119,28 @@ def _barra(porcentaje, ancho=22):
     return "[" + "█" * lleno + "·" * (ancho - lleno) + f"] {porcentaje:3.0f}%"
 
 
+def _combo(racha):
+    """Indicador arcade de aciertos seguidos. Vacío por debajo del umbral."""
+    if racha < 5:
+        return ""
+    if racha >= 20:
+        col, fuego = C["magenta"], " 🔥🔥"
+    elif racha >= 10:
+        col, fuego = C["amarillo"], " 🔥"
+    else:
+        col, fuego = C["cian"], ""
+    return "   " + col + C["negrita"] + f"COMBO x{racha}{fuego}" + C["reset"]
+
+
 def dibujar_prueba(objetivo, escrito, transcurrido, autor, pulsaciones, errores,
-                   ultima_tecla=None, ultimo_ok=True):
+                   ultima_tecla=None, ultimo_ok=True, racha=0):
     """Pinta un frame completo de la prueba en curso.
 
     objetivo     : lista de caracteres objetivo
     escrito      : lista de caracteres ya tecleados (paralela a objetivo)
     ultima_tecla : último caracter pulsado, para iluminarlo en el teclado
     ultimo_ok    : True si esa última pulsación fue correcta
+    racha        : aciertos seguidos, para el indicador de COMBO
     """
     cols, filas = _tam_terminal()
     ancho = max(20, cols - 4)
@@ -176,6 +191,7 @@ def dibujar_prueba(objetivo, escrito, transcurrido, autor, pulsaciones, errores,
             + C["amarillo"] + f"{ppm:5.0f} PPM" + C["reset"]
             + f"   Precisión: {precision:5.1f}%"
             + f"   Tiempo: {transcurrido:5.1f}s"
+            + _combo(racha)
             + "\x1b[K\n"
         )
     out.append("  " + C["dim"] + _barra(progreso) + C["reset"] + "\x1b[K\n")
