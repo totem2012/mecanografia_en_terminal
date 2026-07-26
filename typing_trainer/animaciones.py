@@ -241,31 +241,6 @@ def contador_lineas(formatos, pasos=16, paso=0.03):
         io.vaciar_entrada()
 
 
-# --------------------------------------------------------------------------- #
-#  PRESS START parpadeante (menú principal)
-# --------------------------------------------------------------------------- #
-def press_start(parpadeos=3, paso=0.18):
-    """Parpadea un '► PRESS START ◄' estilo 'insert coin' y lo deja encendido.
-
-    Se dibuja en la línea actual (la deja ocupada y baja con \\n al terminar).
-    """
-    linea = layout.centrar("► PRESS START ◄")
-    encendido = C["amarillo"] + C["negrita"]
-    if not activadas():
-        _w(encendido + linea + C["reset"] + "\n")
-        return
-    try:
-        with io.raw_mode():
-            for i in range(parpadeos * 2 - 1):
-                col = encendido if i % 2 == 0 else C["dim"]
-                _w("\r" + col + linea + C["reset"] + "\x1b[K")
-                if _esperar(paso):
-                    break
-    finally:
-        _w("\r" + encendido + linea + C["reset"] + "\x1b[K\n")
-        io.vaciar_entrada()
-
-
 _MEDALLAS = {1: "🥇", 2: "🥈", 3: "🥉", 4: "4️⃣", 5: "5️⃣"}
 
 

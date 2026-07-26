@@ -249,7 +249,6 @@ def menu_principal(sesion):
             "4) Salir",
             "",
         ])
-        animaciones.press_start()
         opcion = _leer("Elige una opción: ").lower()
         if opcion == "1":
             practicar_citas(sesion)
@@ -259,7 +258,7 @@ def menu_principal(sesion):
             ver_estadisticas(sesion)
         elif opcion in ("4", "salir", "q"):
             limpiar()
-            print("  ¡Hasta la próxima! Sigue practicando. 👋\n")
+            _mostrar(["¡Hasta la próxima! Sigue practicando. 👋", ""])
             return
 
 
