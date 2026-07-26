@@ -6,28 +6,14 @@ borra lo que sobre con \x1b[J. Así no hay un borrado total de pantalla por
 pulsación.
 """
 
-import os
-import shutil
 import sys
 
-from . import teclado
+from . import layout, teclado
 
-
-def _tam_terminal():
-    """Tamaño REAL del terminal, consultando el dispositivo.
-
-    Se evita `shutil.get_terminal_size`, que prioriza las variables de entorno
-    COLUMNS/LINES; estas pueden quedar obsoletas al redimensionar la ventana y
-    provocar que las líneas excedan el ancho real (el terminal las re-parte,
-    cortando palabras y desincronizando el redibujado)."""
-    for flujo in (sys.__stdout__, sys.stdout, sys.__stderr__):
-        try:
-            tam = os.get_terminal_size(flujo.fileno())
-            if tam.columns > 0:
-                return tam.columns, tam.lines
-        except (OSError, ValueError, AttributeError):
-            continue
-    return tuple(shutil.get_terminal_size((80, 24)))
+# Ancho máximo del bloque de juego. En pantallas anchas el texto no se estira de
+# borde a borde (cansa la vista y descoloca la mirada al saltar de línea): se
+# limita a una columna legible que luego se centra.
+ANCHO_MAX = 92
 
 C = {
     "reset": "\x1b[0m",
@@ -114,6 +100,12 @@ def _estilo_de(i, pos, objetivo, escrito):
     return "pendiente", ch
 
 
+# Ancho de la línea de métricas SIN el COMBO: los campos tienen ancho fijo, así
+# que es constante durante toda la prueba. Sirve de ancho mínimo del bloque para
+# que este no se mueva cuando aparece o desaparece el COMBO.
+_ANCHO_METRICAS = 46
+
+
 def _barra(porcentaje, ancho=22):
     lleno = int(porcentaje / 100 * ancho)
     return "[" + "█" * lleno + "·" * (ancho - lleno) + f"] {porcentaje:3.0f}%"
@@ -142,19 +134,19 @@ def dibujar_prueba(objetivo, escrito, transcurrido, autor, pulsaciones, errores,
     ultimo_ok    : True si esa última pulsación fue correcta
     racha        : aciertos seguidos, para el indicador de COMBO
     """
-    cols, filas = _tam_terminal()
-    ancho = max(20, cols - 4)
+    cols, filas = layout.tam_terminal()
+    ancho = max(20, min(cols - 4, ANCHO_MAX))
     pos = len(escrito)
     texto = "".join(objetivo)
     lineas = _ajustar_lineas(texto, ancho)
 
-    out = ["\x1b[H"]
-    out.append(C["negrita"] + C["cian"] + "  ⌨  Práctica de Mecanografía" + C["reset"] + "\x1b[K\n")
-    out.append("\x1b[K\n")
+    # `bloque` son las líneas del frame SIN la sangría de centrado: se compone
+    # entero para conocer su alto y poder centrarlo también en vertical.
+    bloque = [C["negrita"] + C["cian"] + "⌨  Práctica de Mecanografía" + C["reset"], ""]
 
     reset = C["reset"]
     for (a, b) in lineas:
-        pintada = ["  "]
+        pintada = []
         estilo_actual = None
         buffer = []
         for i in range(a, b):
@@ -168,10 +160,9 @@ def dibujar_prueba(objetivo, escrito, transcurrido, autor, pulsaciones, errores,
                 buffer.append(ch)
         if buffer:
             pintada.append(_ESTILOS[estilo_actual] + "".join(buffer) + reset)
-        pintada.append("\x1b[K")
-        out.append("".join(pintada) + "\n")
+        bloque.append("".join(pintada))
 
-    out.append("\x1b[K\n")
+    bloque.append("")
 
     correctos = sum(1 for i in range(pos) if escrito[i] == objetivo[i])
     minutos = transcurrido / 60 if transcurrido > 0 else 0
@@ -179,36 +170,59 @@ def dibujar_prueba(objetivo, escrito, transcurrido, autor, pulsaciones, errores,
     precision = (pulsaciones - errores) / pulsaciones * 100 if pulsaciones else 100.0
     progreso = pos / len(objetivo) * 100 if objetivo else 0
 
+    # Las métricas van alineadas al borde izquierdo del bloque (no centradas una
+    # a una): su ancho cambia con cada pulsación —dígitos, COMBO— y centrarlas
+    # las haría bailar de lado a lado en cada frame.
     if pulsaciones == 0:
         # El cronómetro aún no arranca: arrancará con la primera tecla.
-        out.append(
-            "  " + C["dim"] + "⏱  El tiempo arranca al pulsar la primera tecla…"
-            + C["reset"] + "\x1b[K\n"
+        bloque.append(
+            C["dim"] + "⏱  El tiempo arranca al pulsar la primera tecla…" + C["reset"]
         )
     else:
-        out.append(
-            "  "
-            + C["amarillo"] + f"{ppm:5.0f} PPM" + C["reset"]
+        bloque.append(
+            C["amarillo"] + f"{ppm:5.0f} PPM" + C["reset"]
             + f"   Precisión: {precision:5.1f}%"
             + f"   Tiempo: {transcurrido:5.1f}s"
             + _combo(racha)
-            + "\x1b[K\n"
         )
-    out.append("  " + C["dim"] + _barra(progreso) + C["reset"] + "\x1b[K\n")
+    bloque.append(C["dim"] + _barra(progreso) + C["reset"])
     if autor:
-        out.append("  " + C["dim"] + f"— {autor}" + C["reset"] + "\x1b[K\n")
-    out.append("\x1b[K\n")
+        bloque.append(C["dim"] + f"— {autor}" + C["reset"])
+    bloque.append("")
+
+    ayuda = C["dim"] + "ESC: salir   ·   ⌫ Retroceso: corregir" + C["reset"]
+
+    # Ancho real del bloque: con textos cortos se encoge al contenido para que
+    # quede bien centrado. Se mide con elementos de ancho ESTABLE (el texto, las
+    # métricas sin COMBO, la ayuda): si dependiera del COMBO o de los dígitos de
+    # las cifras, el bloque entero se movería de lado en cada pulsación.
+    ancho_bloque = min(ancho, max(
+        [layout.ancho(texto[a:b].rstrip()) for (a, b) in lineas]
+        + [_ANCHO_METRICAS, layout.ancho(ayuda)]
+        + ([layout.ancho(f"— {autor}")] if autor else [])
+    ))
 
     # Teclado: solo si está activado y la terminal tiene altura suficiente,
     # para no provocar scroll que rompa el redibujado anti-parpadeo.
     filas_teclado = teclado.lineas(ultima_tecla, ultimo_ok)
-    usadas = 2 + len(lineas) + 4 + (1 if autor else 0)  # cabecera, texto, métricas, autor
-    if teclado.activado() and filas >= usadas + len(filas_teclado) + 2:
-        for fila in filas_teclado:
-            out.append(fila + "\x1b[K\n")
-        out.append("\x1b[K\n")
+    alto_util = filas - 1
+    if (teclado.activado()
+            and len(bloque) + len(filas_teclado) + 2 <= alto_util):
+        ancho_bloque = max(ancho_bloque, max(layout.ancho(f) for f in filas_teclado))
+        # Ancho fijo, así que centrarlo dentro del bloque no produce baile.
+        bloque.extend(layout.centrar_bloque(filas_teclado, ancho_bloque))
+        bloque.append("")
+    bloque.append(layout.centrar(ayuda, ancho_bloque))
 
-    out.append("  " + C["dim"] + "ESC: salir   ·   ⌫ Retroceso: corregir" + C["reset"] + "\x1b[K")
+    # Centrado: sangría común a la izquierda y relleno de líneas arriba.
+    izq = layout.sangria(ancho_bloque, cols)
+    arriba = max(0, (alto_util - len(bloque)) // 2)
+
+    out = ["\x1b[H"]
+    out.extend(["\x1b[K\n"] * arriba)
+    for linea in bloque[:-1]:
+        out.append(izq + linea + "\x1b[K\n")
+    out.append(izq + bloque[-1] + "\x1b[K")
     out.append("\x1b[J")
 
     sys.stdout.write("".join(out))

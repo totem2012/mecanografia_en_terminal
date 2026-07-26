@@ -11,6 +11,7 @@ import os
 import sys
 import time
 
+from . import layout
 from . import platform_io as io
 from .renderer import C
 
@@ -50,9 +51,15 @@ def _centro(texto, ancho):
     return " " * izq + texto + " " * (sobra - izq)
 
 
+def _sangria_marco():
+    """Sangría fija del marco de la intro (constante en todos los frames, para
+    que el marco no se desplace mientras se dibuja de izquierda a derecha)."""
+    return layout.sangria(_ANCHO + 2)
+
+
 def _linea_titulo(n_revelado, resaltar, base):
     """Línea central del marco con el título revelado hasta `n_revelado`."""
-    partes = ["  " + C["cian"] + C["negrita"] + "║" + C["reset"] + base + C["negrita"]]
+    partes = [_sangria_marco() + C["cian"] + C["negrita"] + "║" + C["reset"] + base + C["negrita"]]
     for i, ch in enumerate(_MED):
         if i >= n_revelado:
             partes.append(" ")
@@ -74,16 +81,21 @@ def _frame(borde, n_titulo, resaltar, base, n_subt, pulso=False):
     n_subt    : caracteres del subtítulo revelados
     pulso     : si el subtítulo va resaltado (pulso final)
     """
-    sup = "  " + C["cian"] + C["negrita"] + "╔" + "═" * borde + ("╗" if borde >= _ANCHO else "") + C["reset"]
-    inf = "  " + C["cian"] + C["negrita"] + "╚" + "═" * borde + ("╝" if borde >= _ANCHO else "") + C["reset"]
+    pre = _sangria_marco()
+    sup = pre + C["cian"] + C["negrita"] + "╔" + "═" * borde + ("╗" if borde >= _ANCHO else "") + C["reset"]
+    inf = pre + C["cian"] + C["negrita"] + "╚" + "═" * borde + ("╝" if borde >= _ANCHO else "") + C["reset"]
     col_subt = C["amarillo"] + C["negrita"] if pulso else C["dim"]
     subt_txt = _centro(_SUBT, len(_MED))[:n_subt]
 
-    out = ["\x1b[H\n\n"]
+    filas = layout.tam_terminal()[1]
+    arriba = max(1, (filas - 5) // 2)   # el bloque ocupa 5 líneas
+
+    out = ["\x1b[H"]
+    out.extend(["\x1b[K\n"] * arriba)
     out.append(sup + "\x1b[K\n")
     out.append(_linea_titulo(n_titulo, resaltar, base) + "\x1b[K\n")
     out.append(inf + "\x1b[K\n\n")
-    out.append("  " + col_subt + "  " + subt_txt + C["reset"] + "\x1b[K\n")
+    out.append(pre + col_subt + " " + subt_txt + C["reset"] + "\x1b[K\n")
     out.append("\x1b[J")
     return "".join(out)
 
@@ -153,7 +165,7 @@ def intro():
 def _caja_centrada(texto, color, ancho_int=13):
     """Caja de doble marco con `texto` centrado, estilo marcador arcade."""
     medio = _centro(texto, ancho_int)
-    pad = "          "  # margen izquierdo fijo
+    pad = layout.sangria(ancho_int + 2)   # caja centrada en la consola
     cab = color + C["negrita"]
     top = pad + cab + "╔" + "═" * ancho_int + "╗" + C["reset"]
     vac = pad + cab + "║" + " " * ancho_int + "║" + C["reset"]
@@ -177,10 +189,11 @@ def cuenta_atras():
         ("¡YA!", C["correcto"], 0.45),
     ]
     _w("\x1b[2J\x1b[H\x1b[?25l")
+    arriba = max(1, (layout.tam_terminal()[1] - 5) // 2)   # la caja ocupa 5 líneas
     try:
         with io.raw_mode():
             for txt, col, dur in pasos:
-                _w("\x1b[H\n\n\n\n")
+                _w("\x1b[H" + "\n" * arriba)
                 _w(_caja_centrada(txt, col) + "\n")
                 _w("\x1b[J")
                 if _esperar(dur):
@@ -236,7 +249,7 @@ def press_start(parpadeos=3, paso=0.18):
 
     Se dibuja en la línea actual (la deja ocupada y baja con \\n al terminar).
     """
-    linea = "  " + _centro("► PRESS START ◄", _ANCHO)
+    linea = layout.centrar("► PRESS START ◄")
     encendido = C["amarillo"] + C["negrita"]
     if not activadas():
         _w(encendido + linea + C["reset"] + "\n")
@@ -265,8 +278,9 @@ def celebrar_top(nombre, ppm, puesto):
     if not activadas():
         # Sin animación: mensaje simple.
         etiqueta = "¡NUEVO RÉCORD #1!" if es_record else f"¡TOP 5 — Puesto #{puesto}!"
-        _w(C["amarillo"] + C["negrita"]
-           + f"\n  {medalla} {etiqueta}  {nombre} — {ppm:.0f} PPM\n" + C["reset"])
+        _w("\n" + layout.centrar(C["amarillo"] + C["negrita"]
+                                 + f"{medalla} {etiqueta}  {nombre} — {ppm:.0f} PPM")
+           + C["reset"] + "\n")
         return
 
     colores = [C["amarillo"], C["cian"], C["correcto"], "\x1b[97m"]
@@ -274,16 +288,24 @@ def celebrar_top(nombre, ppm, puesto):
                else ["🎊  ", "·   ", " 🎊 ", "   🎊"])
     frames = 10 if es_record else 8
     _w("\x1b[?25l")
+    cols, filas = layout.tam_terminal()
+    arriba = max(1, (filas - 5) // 2)   # el bloque ocupa 5 líneas
     try:
         with io.raw_mode():
             for i in range(frames):
                 col = colores[i % len(colores)]
                 ado = adornos[i % len(adornos)]
-                _w("\x1b[2J\x1b[H")
-                _w("\n\n")
-                _w(f"        {ado}{col}{C['negrita']}{titulo}{C['reset']}{ado}\n\n")
-                _w(f"            {col}{nombre} — {ppm:.0f} PPM{C['reset']}\n\n")
-                _w(f"              {C['amarillo']}{medalla}  ¡Puesto #{puesto} del TOP 5!{C['reset']}\n")
+                # Los adornos tienen todos el mismo ancho, así que el centrado
+                # no cambia entre frames y el texto no se mueve al parpadear.
+                lineas = [
+                    f"{ado}{col}{C['negrita']}{titulo}{C['reset']}{ado}",
+                    "",
+                    f"{col}{nombre} — {ppm:.0f} PPM{C['reset']}",
+                    "",
+                    f"{C['amarillo']}{medalla}  ¡Puesto #{puesto} del TOP 5!{C['reset']}",
+                ]
+                _w("\x1b[2J\x1b[H" + "\n" * arriba)
+                _w("\n".join(layout.centrar(l, cols) for l in lineas) + "\n")
                 if _esperar(0.13):
                     break
     finally:

@@ -2,16 +2,19 @@
 
 import sys
 
-from . import animaciones, engine, estadisticas, ranking, textos
+from . import animaciones, engine, estadisticas, layout, ranking, textos
 from .renderer import C
 
-BANNER = (
-    C["cian"] + C["negrita"]
-    + "╔══════════════════════════════════════════════╗\n"
-    + "║        ⌨   MECANOGRAFÍA EN TERMINAL   ⌨        ║\n"
-    + "╚══════════════════════════════════════════════╝"
-    + C["reset"]
-)
+BANNER = [
+    C["cian"] + C["negrita"] + "╔══════════════════════════════════════════════╗",
+    "║       ⌨   MECANOGRAFÍA EN TERMINAL   ⌨       ║",
+    "╚══════════════════════════════════════════════╝" + C["reset"],
+]
+
+# Sangría del último bloque dibujado. Los `input()` la reutilizan para que el
+# texto que escribe el jugador quede alineado con la pantalla, no pegado al
+# borde izquierdo de la consola.
+_sangria = ""
 
 
 def limpiar():
@@ -19,13 +22,34 @@ def limpiar():
     sys.stdout.flush()
 
 
+def _sangrar(lineas):
+    """Fija (y devuelve) la sangría que centra `lineas` como un bloque único."""
+    global _sangria
+    _sangria = layout.sangria(max((layout.ancho(l) for l in lineas), default=0))
+    return _sangria
+
+
+def _mostrar(lineas):
+    """Imprime un bloque de líneas centrado horizontalmente."""
+    pre = _sangrar(lineas)
+    print("\n".join(pre + l for l in lineas))
+
+
+def _sangrar_prompt(prompt):
+    """Aplica la sangría al prompt, dejando sus saltos de línea iniciales antes
+    (si no, la sangría se escribiría en la línea anterior)."""
+    cuerpo = prompt.lstrip("\n")
+    saltos = len(prompt) - len(cuerpo)
+    return "\n" * saltos + _sangria + cuerpo
+
+
 def _pausa():
-    input("\n  Pulsa Enter para continuar...")
+    input(_sangrar_prompt("\nPulsa Enter para continuar..."))
 
 
 def _leer(prompt):
     try:
-        return input(prompt).strip()
+        return input(_sangrar_prompt(prompt)).strip()
     except (EOFError, KeyboardInterrupt):
         return "salir"
 
@@ -37,25 +61,28 @@ _MEDALLAS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 
 def _bloque_top5(resaltar=None):
-    """Devuelve el TOP 5 formateado. Si `resaltar` es un puesto (1..5), marca
+    """Devuelve las líneas del TOP 5. Si `resaltar` es un puesto (1..5), marca
     esa fila para que el jugador se vea destacado."""
     tabla = ranking.cargar()
-    lineas = ["  " + C["amarillo"] + C["negrita"] + "🏆  TOP 5 VELOCIDADES" + C["reset"]]
+    lineas = [C["amarillo"] + C["negrita"] + "🏆  TOP 5 VELOCIDADES" + C["reset"]]
     if not tabla:
-        lineas.append("  " + C["dim"] + "Aún no hay marcas. ¡Sé el primero!" + C["reset"])
-        return "\n".join(lineas)
+        lineas.append(C["dim"] + "Aún no hay marcas. ¡Sé el primero!" + C["reset"])
+        return lineas
     for i, e in enumerate(tabla, 1):
+        # Las medallas ocupan DOS columnas: se rellena por ancho visible, no por
+        # len(), para que las filas con y sin medalla queden alineadas.
         medalla = _MEDALLAS.get(i, f"{i}.")
+        medalla += " " * max(1, 3 - layout.ancho(medalla))
         if i == resaltar:
-            fila = f"{medalla:<3} {e['ppm']:>5.0f} PPM  {e['nombre'][:18]:<18} ({e['precision']:.0f}%)"
-            lineas.append("  " + C["correcto"] + C["negrita"] + fila
+            fila = f"{medalla} {e['ppm']:>5.0f} PPM  {e['nombre'][:18]:<18} ({e['precision']:.0f}%)"
+            lineas.append(C["correcto"] + C["negrita"] + fila
                           + "  ◀ ¡AQUÍ ESTÁS!" + C["reset"])
         else:
             lineas.append(
-                f"  {medalla:<3} {C['amarillo']}{e['ppm']:>5.0f} PPM{C['reset']}  "
+                f"{medalla} {C['amarillo']}{e['ppm']:>5.0f} PPM{C['reset']}  "
                 f"{e['nombre'][:18]:<18} {C['dim']}({e['precision']:.0f}%){C['reset']}"
             )
-    return "\n".join(lineas)
+    return lineas
 
 
 def _quizas_registrar_marca(res):
@@ -63,8 +90,9 @@ def _quizas_registrar_marca(res):
     if not ranking.califica(res["ppm"]):
         return
     print()
-    print(C["amarillo"] + C["negrita"] + "  ⭐  ¡Tu velocidad entra al TOP 5!" + C["reset"])
-    nombre = _leer("  Escribe tu nombre para el ranking: ")
+    print(_sangria + C["amarillo"] + C["negrita"]
+          + "⭐  ¡Tu velocidad entra al TOP 5!" + C["reset"])
+    nombre = _leer("Escribe tu nombre para el ranking: ")
     if not nombre or nombre.lower() == "salir":
         nombre = "Anónimo"
     nombre = nombre[:20]
@@ -73,9 +101,7 @@ def _quizas_registrar_marca(res):
         animaciones.celebrar_top(nombre, res["ppm"], puesto)
         # Mostrar la tabla con el jugador resaltado.
         limpiar()
-        print(BANNER)
-        print()
-        print(_bloque_top5(resaltar=puesto))
+        _mostrar(BANNER + [""] + _bloque_top5(resaltar=puesto))
 
 
 # --------------------------------------------------------------------------- #
@@ -83,29 +109,41 @@ def _quizas_registrar_marca(res):
 # --------------------------------------------------------------------------- #
 def mostrar_resultado(res):
     limpiar()
-    print(BANNER)
     palabras = res["caracteres"] / 5
-    print()
-    print(C["negrita"] + "  📊  Resultado de la prueba" + C["reset"])
-    print("  " + "─" * 40)
+
     # Tally arcade: la velocidad y la precisión suben hasta su valor final.
-    animaciones.contador_lineas([
-        lambda t: (f"  Velocidad ....... {C['amarillo']}{res['ppm'] * t:.0f} PPM{C['reset']}  "
+    tally = [
+        lambda t: (f"Velocidad ....... {C['amarillo']}{res['ppm'] * t:.0f} PPM{C['reset']}  "
                    f"({res['cpm'] * t:.0f} caracteres/min)"),
-        lambda t: f"  Precisión ....... {res['precision'] * t:.1f}%",
-    ])
-    print(f"  Errores ......... {res['errores']}")
-    print(f"  Tiempo .......... {res['tiempo']:.1f} s")
-    print(f"  Longitud ........ {res['caracteres']} caracteres (~{palabras:.0f} palabras)")
+        lambda t: f"Precisión ....... {res['precision'] * t:.1f}%",
+    ]
+
+    cabecera = BANNER + [
+        "",
+        C["negrita"] + "📊  Resultado de la prueba" + C["reset"],
+        "─" * 40,
+    ]
+    cola = [
+        f"Errores ......... {res['errores']}",
+        f"Tiempo .......... {res['tiempo']:.1f} s",
+        f"Longitud ........ {res['caracteres']} caracteres (~{palabras:.0f} palabras)",
+    ]
     if res.get("mejor_racha", 0) >= 5:
-        print(f"  Mejor combo ..... {C['magenta']}{C['negrita']}x{res['mejor_racha']}{C['reset']} 🔥")
-    print("  " + "─" * 40)
+        cola.append(f"Mejor combo ..... {C['magenta']}{C['negrita']}x{res['mejor_racha']}{C['reset']} 🔥")
+    cola.append("─" * 40)
     if res["ppm"] >= 60:
-        print(C["correcto"] + "  ¡Excelente velocidad! 🚀" + C["reset"])
+        cola.append(C["correcto"] + "¡Excelente velocidad! 🚀" + C["reset"])
     elif res["ppm"] >= 35:
-        print(C["correcto"] + "  ¡Buen ritmo! Sigue así. 👍" + C["reset"])
+        cola.append(C["correcto"] + "¡Buen ritmo! Sigue así. 👍" + C["reset"])
     else:
-        print(C["dim"] + "  La constancia es la clave. 💪" + C["reset"])
+        cola.append(C["dim"] + "La constancia es la clave. 💪" + C["reset"])
+
+    # La sangría se calcula con TODAS las líneas (incluidas las animadas en su
+    # valor final) para que el bloque no cambie de sitio a mitad de pantalla.
+    pre = _sangrar(cabecera + [f(1.0) for f in tally] + cola)
+    print("\n".join(pre + l for l in cabecera))
+    animaciones.contador_lineas([lambda t, f=f: pre + f(t) for f in tally])
+    print("\n".join(pre + l for l in cola))
 
 
 # --------------------------------------------------------------------------- #
@@ -131,7 +169,7 @@ def _practicar(sesion, fragmentos_o_citas, fuente, es_citas):
         sesion.append(res)
         mostrar_resultado(res)
         _quizas_registrar_marca(res)
-        resp = _leer("\n  ¿Otra prueba? (s/n): ").lower()
+        resp = _leer("\n¿Otra prueba? (s/n): ").lower()
         if resp not in ("s", "si", "sí", ""):
             return
 
@@ -143,47 +181,57 @@ def practicar_citas(sesion):
 
 def practicar_texto_propio(sesion):
     limpiar()
-    print(BANNER)
-    print("\n  Carga un archivo de texto (.txt) para practicar con él.")
-    ruta = _leer("\n  Ruta del archivo (vacío para cancelar): ")
+    _mostrar(BANNER + [
+        "",
+        "Carga un archivo de texto (.txt) para practicar con él.",
+    ])
+    ruta = _leer("\nRuta del archivo (vacío para cancelar): ")
     if not ruta or ruta.lower() == "salir":
         return
     try:
         fragmentos = textos.cargar_texto_propio(ruta)
     except FileNotFoundError:
-        print(C["error_bg"] + "  No se encontró el archivo." + C["reset"])
+        print(_sangria + C["error_bg"] + "No se encontró el archivo." + C["reset"])
         _pausa()
         return
     except (ValueError, OSError) as e:
-        print(C["error_bg"] + f"  No se pudo leer: {e}" + C["reset"])
+        print(_sangria + C["error_bg"] + f"No se pudo leer: {e}" + C["reset"])
         _pausa()
         return
-    print(f"\n  Texto dividido en {len(fragmentos)} fragmento(s) para practicar.")
+    print("\n" + _sangria + f"Texto dividido en {len(fragmentos)} fragmento(s) para practicar.")
     _pausa()
     _practicar(sesion, fragmentos, fuente="propio", es_citas=False)
 
 
 def ver_estadisticas(sesion):
     limpiar()
-    print(BANNER)
     res = estadisticas.resumen(sesion)
-    print("\n" + C["negrita"] + "  📈  Estadísticas de esta sesión" + C["reset"])
     if not res:
-        print("\n  Aún no has hecho ninguna prueba en esta sesión.")
+        _mostrar(BANNER + [
+            "",
+            C["negrita"] + "📈  Estadísticas de esta sesión" + C["reset"],
+            "",
+            "Aún no has hecho ninguna prueba en esta sesión.",
+        ])
         _pausa()
         return
-    print("  " + "─" * 46)
-    print(f"  Pruebas en la sesión ...... {res['total']}")
-    print(f"  Mejor velocidad ........... {C['amarillo']}{res['mejor_ppm']:.0f} PPM{C['reset']}")
-    print(f"  Velocidad promedio ........ {res['ppm_promedio']:.0f} PPM")
-    print(f"  Mejor precisión ........... {res['mejor_precision']:.1f}%")
-    print(f"  Precisión promedio ........ {res['precision_promedio']:.1f}%")
-    print("  " + "─" * 46)
-    print(C["negrita"] + "  Últimas pruebas:" + C["reset"])
-    print(f"  {'Hora':<20}{'PPM':>6}{'Precis.':>10}{'Errores':>9}")
+    lineas = BANNER + [
+        "",
+        C["negrita"] + "📈  Estadísticas de esta sesión" + C["reset"],
+        "─" * 46,
+        f"Pruebas en la sesión ...... {res['total']}",
+        f"Mejor velocidad ........... {C['amarillo']}{res['mejor_ppm']:.0f} PPM{C['reset']}",
+        f"Velocidad promedio ........ {res['ppm_promedio']:.0f} PPM",
+        f"Mejor precisión ........... {res['mejor_precision']:.1f}%",
+        f"Precisión promedio ........ {res['precision_promedio']:.1f}%",
+        "─" * 46,
+        C["negrita"] + "Últimas pruebas:" + C["reset"],
+        f"{'Hora':<20}{'PPM':>6}{'Precis.':>10}{'Errores':>9}",
+    ]
     for r in res["recientes"]:
         hora = r["fecha"].replace("T", " ")
-        print(f"  {hora:<20}{r['ppm']:>6.0f}{r['precision']:>9.1f}%{r['errores']:>9}")
+        lineas.append(f"{hora:<20}{r['ppm']:>6.0f}{r['precision']:>9.1f}%{r['errores']:>9}")
+    _mostrar(lineas)
     _pausa()
 
 
@@ -193,17 +241,16 @@ def ver_estadisticas(sesion):
 def menu_principal(sesion):
     while True:
         limpiar()
-        print(BANNER)
-        print()
-        print(_bloque_top5())
-        print()
-        print("  1) Practicar con una cita aleatoria")
-        print("  2) Practicar con mi propio texto (.txt)")
-        print("  3) Ver estadísticas de la sesión")
-        print("  4) Salir")
-        print()
+        _mostrar(BANNER + [""] + _bloque_top5() + [
+            "",
+            "1) Practicar con una cita aleatoria",
+            "2) Practicar con mi propio texto (.txt)",
+            "3) Ver estadísticas de la sesión",
+            "4) Salir",
+            "",
+        ])
         animaciones.press_start()
-        opcion = _leer("  Elige una opción: ").lower()
+        opcion = _leer("Elige una opción: ").lower()
         if opcion == "1":
             practicar_citas(sesion)
         elif opcion == "2":

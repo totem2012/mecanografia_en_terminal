@@ -104,6 +104,16 @@ else:
             self.fd = sys.stdin.fileno()
             self.anterior = termios.tcgetattr(self.fd)
             tty.setraw(self.fd)
+            # `setraw` también desactiva el post-procesado de SALIDA (OPOST), y
+            # como stdin y stdout son el mismo terminal eso afecta al dibujado:
+            # sin OPOST/ONLCR, "\n" es un avance de línea puro (LF) que NO
+            # devuelve el cursor a la columna 0, así que cada línea del frame se
+            # pinta corrida a la derecha de donde acabó la anterior (en Windows
+            # no pasa porque msvcrt no toca el modo de salida). Restauramos los
+            # flags de salida originales; el modo crudo de ENTRADA se conserva.
+            modo = termios.tcgetattr(self.fd)
+            modo[1] = self.anterior[1]
+            termios.tcsetattr(self.fd, termios.TCSADRAIN, modo)
             return self
 
         def __exit__(self, *exc):

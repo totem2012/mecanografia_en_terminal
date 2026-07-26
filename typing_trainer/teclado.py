@@ -69,12 +69,13 @@ def lineas(ultima_tecla=None, ultimo_ok=None):
             return color + f" {letra} " + _RESET
         return _TENUE + f" {letra} " + _RESET
 
+    # Sin margen izquierdo propio: quien dibuja (renderer) centra el bloque
+    # entero, y estas sangrías solo mantienen el escalonado entre filas.
     filas = []
     for sangria, letras in _FILAS:
-        prefijo = "  " + " " * sangria
-        filas.append(prefijo + "".join(celda(l) for l in letras))
+        filas.append(" " * sangria + "".join(celda(l) for l in letras))
 
-    # Barra espaciadora.
+    # Barra espaciadora, centrada bajo las filas de letras.
     etiqueta = "espacio"
     if activa == " ":
         barra = color + f"   {etiqueta}   " + _RESET
